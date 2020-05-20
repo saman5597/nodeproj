@@ -39,6 +39,7 @@ if (process.env.NODE_ENV === 'development') {
 
 // Body-parsing , reading data from body into req.body
 app.use(express.json({ limit: '10kb' })); //will not accept data larger than 10kb
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
 
 // DATA SANITIZATION AGAINST NO-SQL QUERY INJECTIONS

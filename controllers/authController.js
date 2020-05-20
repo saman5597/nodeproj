@@ -82,32 +82,37 @@ exports.protect = catchAsync(async (req, res, next) => {
   }
   // GRANT ACCESS TO PROTECTED ROUTE
   req.user = currentUser;
+  res.locals.user = currentUser; //Passing user variable in pug templates
   next();
 });
 
 // Only for rendered pages and there will be no error
-exports.isLoggedIn = catchAsync(async (req, res, next) => {
+exports.isLoggedIn = async (req, res, next) => {
   if (req.cookies.jwt) {
-    // 1) Verify token
-    const decoded = await promisify(jwt.verify)(
-      req.cookies.jwt,
-      process.env.JWT_SECRET
-    );
-    // 3) Check if user still exists
-    const currentUser = await User.findById(decoded.id);
-    if (!currentUser) {
+    try {
+      // 1) Verify token
+      const decoded = await promisify(jwt.verify)(
+        req.cookies.jwt,
+        process.env.JWT_SECRET
+      );
+      // 3) Check if user still exists
+      const currentUser = await User.findById(decoded.id);
+      if (!currentUser) {
+        return next();
+      }
+      // 4) If user change password after token was issued
+      if (currentUser.changePasswordAfter(decoded.iat)) {
+        return next();
+      }
+      // THERE IS A LOGGED IN USER
+      res.locals.user = currentUser; //Passing user variable in pug templates
+      return next();
+    } catch (err) {
       return next();
     }
-    // 4) If user change password after token was issued
-    if (currentUser.changePasswordAfter(decoded.iat)) {
-      return next();
-    }
-    // THERE IS A LOGGED IN USER
-    res.locals.user = currentUser; //Passing user variable in pug templates
-    return next();
   }
   next();
-});
+};
 
 exports.restrictTo = (...roles) => {
   return (req, res, next) => {
@@ -150,6 +155,16 @@ exports.login = catchAsync(async (req, res, next) => {
   // 3) If everything is ok, send the token back to client
   createAndSendToken(user, 200, 'User logged in successfully.', res);
 });
+
+exports.logout = (req, res) => {
+  const cookieOptions = {
+    expires: new Date(Date.now() + 10 * 1000),
+    secure: false,
+    httpOnly: true
+  };
+  res.cookie('jwt', 'loggedout', cookieOptions);
+  res.status(200).json({ status: 'success' });
+};
 
 exports.forgotPassword = catchAsync(async (req, res, next) => {
   // 1) Get user based on POSTed email
@@ -218,7 +233,7 @@ exports.resetPassword = catchAsync(async (req, res, next) => {
 
 exports.changePassword = catchAsync(async (req, res, next) => {
   // 1) Get user from the collection
-  const user = await User.findById(req.user.id).select('password');
+  const user = await User.findById(req.user.id).select('+password');
   // 2) Check if the POSTed pwd is correct
   if (!(await user.correctPassword(req.body.passwordCurrent, user.password))) {
     return next(

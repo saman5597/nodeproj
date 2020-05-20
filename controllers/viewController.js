@@ -1,6 +1,7 @@
 const axios = require('axios');
-
+const AppErrorHandler = require('./../util/errorHandler');
 const Tour = require('./../models/tourModel');
+const User = require('./../models/userModel');
 const catchAsync = require('./../util/catchAsync');
 
 exports.getOverview = catchAsync(async (req, res, next) => {
@@ -27,6 +28,11 @@ exports.getTour = catchAsync(async (req, res, next) => {
     path: 'reviews',
     fields: 'review rating user'
   });
+
+  if (!tour) {
+    return next(new AppErrorHandler('There is no tour with that name', 404));
+  }
+
   // 2) Build template
   // 3) Render that template using the tour data from step 1
   res.status(200).render('tour', {
@@ -40,3 +46,28 @@ exports.getLoginForm = (req, res) => {
     title: 'Log in to your account'
   });
 };
+
+exports.getAccount = (req, res) => {
+  res.status(200).render('account', {
+    title: 'Your account'
+  });
+};
+
+// For URL Encoding
+exports.updateUserData = catchAsync(async (req,res,next) => {
+  const updatedUser = await User.findByIdAndUpdate(
+    req.user.id,
+    {
+      name: req.body.name,
+      email: req.body.email
+    },
+    {
+      new: true,
+      runValidators: true
+    }
+  );
+  res.status(200).render('account', {
+    title: 'Your account',
+    user: updatedUser
+  });
+});
